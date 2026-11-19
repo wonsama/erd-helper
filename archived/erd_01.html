@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Zero-Dependency ERD Visualizer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Malgun Gothic', -apple-system, BlinkMacSystemFont, sans-serif;
+            display: flex;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            touch-action: none;
+        }
+
+        /* 좌측 사이드바 */
+        #sidebar {
+            width: 360px;
+            max-width: 85vw;
+            background-color: #252526;
+            border-right: 1px solid #3c3c3c;
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            gap: 12px;
+            z-index: 20;
+            transition: margin-left 0.25s ease, transform 0.25s ease;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        #sidebar.collapsed {
+            margin-left: -360px;
+        }
+
+        /* 사이드바 접기/펼치기 토글 버튼 */
+        #toggle-sidebar-btn {
+            position: absolute;
+            top: 14px;
+            right: -36px;
+            width: 36px;
+            height: 36px;
+            background-color: #252526;
+            color: #ffffff;
+            border: 1px solid #3c3c3c;
+            border-left: none;
+            border-radius: 0 6px 6px 0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.4);
+            z-index: 25;
+        }
+
+        #toggle-sidebar-btn:hover {
+            background-color: #333337;
+        }
+
+        h2 {
+            font-size: 16px;
+            color: #ffffff;
+            margin-bottom: 4px;
+        }
+
+        p.desc {
+            font-size: 12px;
+            color: #9cdcfe;
+            line-height: 1.4;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        button.action-btn {
+            background-color: #0e639c;
+            color: white;
+            border: none;
+            padding: 9px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            flex: 1;
+            transition: background 0.15s;
+        }
+
+        button.action-btn:hover {
+            background-color: #1177bb;
+        }
+
+        button.action-btn.secondary {
+            background-color: #3a3d41;
+        }
+
+        button.action-btn.secondary:hover {
+            background-color: #45494e;
+        }
+
+        button.action-btn.success {
+            background-color: #2e7d32;
+        }
+
+        button.action-btn.success:hover {
+            background-color: #388e3c;
+        }
+
+        textarea {
+            flex: 1;
+            background-color: #1e1e1e;
+            color: #ce9178;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 12px;
+            resize: none;
+            line-height: 1.4;
+            touch-action: auto;
+        }
+
+        textarea:focus {
+            outline: 1px solid #007acc;
+        }
+
+        #json-status {
+            font-size: 11px;
+            padding: 6px 8px;
+            border-radius: 4px;
+            background-color: #1e1e1e;
+            border: 1px solid #3c3c3c;
+            color: #9cdcfe;
+            line-height: 1.35;
+            word-break: break-word;
+        }
+
+        #json-status.ok {
+            color: #89d185;
+            border-color: #2e7d32;
+        }
+
+        #json-status.error {
+            color: #f48771;
+            border-color: #c62828;
+            background-color: rgba(198, 40, 40, 0.12);
+        }
+
+        /* 우측 캔버스 영역 */
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            background-color: #181818;
+            background-image: radial-gradient(#333333 1px, transparent 1px);
+            background-size: 20px 20px;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+            touch-action: none;
+        }
+
+        canvas:active {
+            cursor: grabbing;
+        }
+
+        /* 컬러 피커 팝업 */
+        #color-palette {
+            position: absolute;
+            display: none;
+            background: #2d2d30;
+            border: 1px solid #454545;
+            padding: 8px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            gap: 8px;
+            z-index: 30;
+            align-items: center;
+        }
+
+        .color-swatch {
+            width: 26px;
+            height: 26px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+
+        .color-swatch:hover {
+            transform: scale(1.1);
+            border-color: #fff;
+        }
+
+        #custom-color-input {
+            width: 28px;
+            height: 28px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        /* 우측 하단 줌 컨트롤 바 */
+        #zoom-controls {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            display: flex;
+            align-items: center;
+            background: rgba(37, 37, 38, 0.92);
+            border: 1px solid #454545;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+            z-index: 15;
+            overflow: hidden;
+        }
+
+        .zoom-btn {
+            width: 38px;
+            height: 36px;
+            background: transparent;
+            border: none;
+            color: #ffffff;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s;
+        }
+
+        .zoom-btn:hover,
+        .zoom-btn:active {
+            background: #3e3e42;
+        }
+
+        #zoom-level {
+            min-width: 52px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            color: #cccccc;
+            border-left: 1px solid #3c3c3c;
+            border-right: 1px solid #3c3c3c;
+            padding: 0 6px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .zoom-btn.text-btn {
+            width: auto;
+            padding: 0 10px;
+            font-size: 12px;
+            border-left: 1px solid #3c3c3c;
+        }
+
+        /* 우측 상단 필드명/코멘트 표시 전환 토글 */
+        #display-mode-toggle {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            align-items: center;
+            background: rgba(37, 37, 38, 0.92);
+            border: 1px solid #454545;
+            border-radius: 6px;
+            padding: 3px;
+            gap: 3px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+            z-index: 15;
+        }
+
+        .mode-btn {
+            background: transparent;
+            border: none;
+            color: #aaaaaa;
+            font-size: 12px;
+            font-weight: bold;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+            user-select: none;
+        }
+
+        .mode-btn:hover {
+            color: #ffffff;
+            background: #333337;
+        }
+
+        .mode-btn.active {
+            background: #0e639c;
+            color: #ffffff;
+        }
+
+        /* 모바일 대응: 사이드바 오버레이 처리 */
+        @media (max-width: 768px) {
+            #sidebar {
+                position: absolute;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                width: 310px;
+                box-shadow: 4px 0 16px rgba(0, 0, 0, 0.6);
+            }
+
+            #sidebar.collapsed {
+                margin-left: 0;
+                transform: translateX(-100%);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="sidebar">
+        <button id="toggle-sidebar-btn" onclick="toggleSidebar()" title="데이터 패널 접기/펼치기">◀</button>
+
+        <div>
+            <h2>ERD JSON 데이터 편집기</h2>
+            <p class="desc">• <b>드래그/터치:</b> 테이블 이동 &nbsp;|&nbsp; <b>테이블 선택:</b> 연관 관계 강조<br>• <b>헤더 탭:</b> 색상 변경 &nbsp;|&nbsp; 변경사항은 브라우저에 자동 저장됩니다</p>
+        </div>
+
+        <div class="btn-group">
+            <button class="action-btn" onclick="applyFromTextarea(false, true)">그래프 반영</button>
+            <button class="action-btn secondary" onclick="autoLayout()">자동 정렬</button>
+            <button class="action-btn secondary" onclick="resetToDefault()" title="초기 샘플 데이터로 복원">샘플 복원</button>
+        </div>
+
+        <textarea id="json-input" spellcheck="false"></textarea>
+        <div id="json-status" class="ok">준비 완료</div>
+
+        <div class="btn-group">
+            <button class="action-btn success" onclick="exportJSON()">JSON Export</button>
+            <button class="action-btn secondary" onclick="document.getElementById('file-input').click()">JSON Import</button>
+            <button class="action-btn" onclick="exportPNG()" title="전체 ERD를 고해상도 PNG 이미지로 저장">PNG 저장</button>
+            <input type="file" id="file-input" accept=".json" style="display:none" onchange="importJSON(event)">
+        </div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="erd-canvas"></canvas>
+
+        <!-- 테이블 헤더 클릭/터치 시 나타나는 색상 팔레트 -->
+        <div id="color-palette">
+            <div class="color-swatch" style="background:#007acc;" onclick="changeTableColor('#007acc')"></div>
+            <div class="color-swatch" style="background:#2e7d32;" onclick="changeTableColor('#2e7d32')"></div>
+            <div class="color-swatch" style="background:#c62828;" onclick="changeTableColor('#c62828')"></div>
+            <div class="color-swatch" style="background:#ef6c00;" onclick="changeTableColor('#ef6c00')"></div>
+            <div class="color-swatch" style="background:#6a1b9a;" onclick="changeTableColor('#6a1b9a')"></div>
+            <div class="color-swatch" style="background:#00838f;" onclick="changeTableColor('#00838f')"></div>
+            <input type="color" id="custom-color-input" title="직접 색상 선택" onchange="changeTableColor(this.value)">
+        </div>
+
+        <!-- 우측 상단 필드명 / 코멘트 전환 토글 -->
+        <div id="display-mode-toggle" role="group" aria-label="표시 모드 전환">
+            <button id="mode-btn-name" class="mode-btn active" onclick="setDisplayMode('name')" title="테이블 및 컬럼을 필드명(물리명)으로 표시">필드명</button>
+            <button id="mode-btn-comment" class="mode-btn" onclick="setDisplayMode('comment')" title="테이블 및 컬럼을 코멘트(논리명)로 표시 (미입력 시 필드명 표시)">코멘트</button>
+        </div>
+
+        <!-- 우측 하단 확대/축소 컨트롤 -->
+        <div id="zoom-controls">
+            <button class="zoom-btn" onclick="zoomBy(1 / 1.15)" title="축소">−</button>
+            <div id="zoom-level" onclick="resetZoom()" title="클릭 시 100% 초기화">100%</div>
+            <button class="zoom-btn" onclick="zoomBy(1.15)" title="확대">+</button>
+            <button class="zoom-btn text-btn" onclick="fitToScreen()" title="전체 테이블이 한 화면에 보이도록 맞춤">Fit</button>
+        </div>
+    </div>
+
+    <script>
+        const defaultData = {
+            "tables": [
+                {
+                    "name": "TB_MEMBER",
+                    "comment": "회원",
+                    "x": 60,
+                    "y": 90,
+                    "headerColor": "#007acc",
+                    "columns": [
+                        { "name": "MEMBER_ID", "comment": "회원 ID", "type": "PK" },
+                        { "name": "DEPT_ID", "comment": "부서 ID", "type": "FK", "refTable": "TB_DEPT", "refColumn": "DEPT_ID" },
+                        { "name": "LOGIN_ID", "comment": "로그인 ID", "type": "COL" },
+                        { "name": "MEMBER_NM", "comment": "회원명", "type": "COL" }
+                    ]
+                },
+                {
+                    "name": "TB_DEPT",
+                    "comment": "부서",
+                    "x": 380,
+                    "y": 50,
+                    "headerColor": "#2e7d32",
+                    "columns": [
+                        { "name": "DEPT_ID", "comment": "부서 ID", "type": "PK" },
+                        { "name": "DEPT_NM", "comment": "부서명", "type": "COL" },
+                        { "name": "USE_YN", "type": "COL" }
+                    ]
+                },
+                {
+                    "name": "TB_ORDER",
+                    "comment": "주문",
+                    "x": 380,
+                    "y": 260,
+                    "headerColor": "#ef6c00",
+                    "columns": [
+                        { "name": "ORDER_ID", "comment": "주문 ID", "type": "PK" },
+                        { "name": "MEMBER_ID", "comment": "회원 ID", "type": "FK", "refTable": "TB_MEMBER", "refColumn": "MEMBER_ID" },
+                        { "name": "ORDER_DT", "comment": "주문일자", "type": "COL" },
+                        { "name": "TOTAL_AMT", "comment": "총 주문금액", "type": "COL" }
+                    ]
+                },
+                {
+                    "name": "TB_ORDER_ITEM",
+                    "comment": "주문 상세",
+                    "x": 700,
+                    "y": 260,
+                    "headerColor": "#6a1b9a",
+                    "columns": [
+                        { "name": "ITEM_SEQ", "comment": "상세 순번", "type": "PK" },
+                        { "name": "ORDER_ID", "comment": "주문 ID", "type": "FK", "refTable": "TB_ORDER", "refColumn": "ORDER_ID" },
+                        { "name": "PROD_CD", "comment": "상품 코드", "type": "COL" },
+                        { "name": "QTY", "comment": "수량", "type": "COL" }
+                    ]
+                }
+            ]
+        };
+
+        const STORAGE_KEY = 'erd_helper_data_v1';
+        let erdData = JSON.parse(JSON.stringify(defaultData));
+
+        const sidebar = document.getElementById('sidebar');
+        const toggleBtn = document.getElementById('toggle-sidebar-btn');
+        const canvas = document.getElementById('erd-canvas');
+        const ctx = canvas.getContext('2d');
+        const textarea = document.getElementById('json-input');
+        const jsonStatus = document.getElementById('json-status');
+        const palette = document.getElementById('color-palette');
+        const zoomLevelLabel = document.getElementById('zoom-level');
+
+        const MIN_TABLE_WIDTH = 210;
+        const MAX_TABLE_WIDTH = 440;
+        const HEADER_HEIGHT = 34;
+        const ROW_HEIGHT = 26;
+
+        let draggingTable = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        let isDraggingMoved = false;
+        let selectedTable = null;
+        let inputDebounceTimer = null;
+        let displayMode = 'name'; // 'name' | 'comment'
+
+        function setDisplayMode(mode) {
+            if (mode !== 'name' && mode !== 'comment') return;
+            displayMode = mode;
+            document.getElementById('mode-btn-name').classList.toggle('active', mode === 'name');
+            document.getElementById('mode-btn-comment').classList.toggle('active', mode === 'comment');
+            palette.style.display = 'none';
+            draw();
+        }
+
+        function getDisplayLabel(item) {
+            if (displayMode === 'comment' && item && typeof item.comment === 'string' && item.comment.trim() !== '') {
+                return item.comment.trim();
+            }
+            return (item && item.name) ? item.name : '';
+        }
+
+        // 뷰포트 변환(Pan & Zoom)
+        let panX = 0;
+        let panY = 0;
+        let scale = 1;
+        let isPanning = false;
+        let panStartX = 0;
+        let panStartY = 0;
+
+        // 모바일 핀치 줌 상태
+        let lastPinchDist = null;
+        let lastTouchPos = { x: 0, y: 0 };
+
+        function setJsonStatus(message, isError = false) {
+            jsonStatus.textContent = message;
+            jsonStatus.className = isError ? 'error' : 'ok';
+        }
+
+        function saveToStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(erdData));
+            } catch (e) {
+                // 시크릿 모드 또는 용량 초과 시 무시
+            }
+        }
+
+        function loadFromStorage() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (!saved) return false;
+                const parsed = JSON.parse(saved);
+                if (parsed && Array.isArray(parsed.tables)) {
+                    erdData = parsed;
+                    return true;
+                }
+            } catch (e) {
+                // 손상된 데이터 무시
+            }
+            return false;
+        }
+
+        function init() {
+            const loaded = loadFromStorage();
+            textarea.value = JSON.stringify(erdData, null, 2);
+            setJsonStatus(
+                loaded
+                    ? `✓ 저장된 ERD 복원됨 (테이블 ${erdData.tables.length}개)`
+                    : `✓ 샘플 ERD 로드됨 (테이블 ${erdData.tables.length}개)`
+            );
+
+            // JSON 편집 시 디바운스 실시간 반영
+            textarea.addEventListener('input', () => {
+                clearTimeout(inputDebounceTimer);
+                inputDebounceTimer = setTimeout(() => {
+                    applyFromTextarea(true, false);
+                }, 350);
+            });
+
+            // 모바일 화면 크기일 경우 초기 진입 시 사이드바 접어두기
+            if (window.innerWidth <= 768) {
+                sidebar.classList.add('collapsed');
+                toggleBtn.textContent = '▶';
+            }
+            resizeCanvas();
+            fitToScreen();
+            window.addEventListener('resize', resizeCanvas);
+        }
+
+        // 좌측 데이터 패널 접기/펼치기
+        function toggleSidebar() {
+            const isCollapsed = sidebar.classList.toggle('collapsed');
+            toggleBtn.textContent = isCollapsed ? '▶' : '◀';
+
+            // 데스크톱 레이아웃 변경 시 애니메이션 종료 후 캔버스 크기 재조정
+            setTimeout(resizeCanvas, 260);
+        }
+
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = container.clientWidth * dpr;
+            canvas.height = container.clientHeight * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            draw();
+        }
+
+        function screenToWorld(sx, sy) {
+            return {
+                x: (sx - panX) / scale,
+                y: (sy - panY) / scale
+            };
+        }
+
+        function getTableWidth(table, targetCtx = ctx) {
+            targetCtx.save();
+            targetCtx.font = 'bold 13px "Malgun Gothic", sans-serif';
+            let maxWidth = targetCtx.measureText(getDisplayLabel(table)).width + 28;
+
+            if (table.columns && table.columns.length > 0) {
+                targetCtx.font = 'bold 12px Consolas, "Malgun Gothic", sans-serif';
+                table.columns.forEach(col => {
+                    const colText = getDisplayLabel(col);
+                    const w = 36 + targetCtx.measureText(colText).width + 18;
+                    if (w > maxWidth) maxWidth = w;
+                });
+            }
+            targetCtx.restore();
+            return Math.min(Math.max(Math.ceil(maxWidth), MIN_TABLE_WIDTH), MAX_TABLE_WIDTH);
+        }
+
+        function getTableHeight(table) {
+            return HEADER_HEIGHT + (table.columns ? table.columns.length : 0) * ROW_HEIGHT + 6;
+        }
+
+        function getTablesBounds(targetCtx = ctx) {
+            if (!erdData.tables || erdData.tables.length === 0) return null;
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            erdData.tables.forEach(t => {
+                const x = t.x || 0;
+                const y = t.y || 0;
+                const w = getTableWidth(t, targetCtx);
+                const h = getTableHeight(t);
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x + w > maxX) maxX = x + w;
+                if (y + h > maxY) maxY = y + h;
+            });
+            return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+        }
+
+        function fitToScreen() {
+            const container = document.getElementById('canvas-container');
+            const bounds = getTablesBounds();
+            if (!bounds || container.clientWidth === 0 || container.clientHeight === 0) {
+                panX = 0;
+                panY = 0;
+                scale = 1;
+                updateZoomLabel();
+                draw();
+                return;
+            }
+
+            const padding = 48;
+            const availW = Math.max(container.clientWidth - padding * 2, 100);
+            const availH = Math.max(container.clientHeight - padding * 2, 100);
+            const targetScale = Math.min(availW / Math.max(bounds.width, 1), availH / Math.max(bounds.height, 1), 1.35);
+            scale = Math.min(Math.max(targetScale, 0.3), 2.5);
+
+            panX = (container.clientWidth - bounds.width * scale) / 2 - bounds.minX * scale;
+            panY = (container.clientHeight - bounds.height * scale) / 2 - bounds.minY * scale;
+
+            palette.style.display = 'none';
+            updateZoomLabel();
+            draw();
+        }
+
+        function getRelatedTableNames(focusTable) {
+            if (!focusTable) return null;
+            const related = new Set([focusTable.name]);
+
+            if (focusTable.columns) {
+                focusTable.columns.forEach(col => {
+                    if (col.type === 'FK' && col.refTable) {
+                        related.add(col.refTable);
+                    }
+                });
+            }
+
+            erdData.tables.forEach(t => {
+                if (!t.columns) return;
+                const refsFocus = t.columns.some(col => col.type === 'FK' && col.refTable === focusTable.name);
+                if (refsFocus) related.add(t.name);
+            });
+
+            return related;
+        }
+
+        function truncateText(targetCtx, text, maxWidth) {
+            if (targetCtx.measureText(text).width <= maxWidth) return text;
+            let trimmed = text;
+            while (trimmed.length > 1 && targetCtx.measureText(trimmed + '…').width > maxWidth) {
+                trimmed = trimmed.slice(0, -1);
+            }
+            return trimmed + '…';
+        }
+
+        function updateZoomLabel() {
+            zoomLevelLabel.textContent = Math.round(scale * 100) + '%';
+        }
+
+        // 버튼 클릭을 통한 줌 인/아웃 (캔버스 중앙 기준)
+        function zoomBy(factor) {
+            const container = document.getElementById('canvas-container');
+            const cx = container.clientWidth / 2;
+            const cy = container.clientHeight / 2;
+            applyZoomAt(cx, cy, scale * factor);
+        }
+
+        function resetZoom() {
+            const container = document.getElementById('canvas-container');
+            const cx = container.clientWidth / 2;
+            const cy = container.clientHeight / 2;
+            applyZoomAt(cx, cy, 1);
+        }
+
+        function applyZoomAt(sx, sy, targetScale) {
+            const newScale = Math.min(Math.max(targetScale, 0.3), 2.5);
+            panX = sx - (sx - panX) * (newScale / scale);
+            panY = sy - (sy - panY) * (newScale / scale);
+            scale = newScale;
+            palette.style.display = 'none';
+            updateZoomLabel();
+            draw();
+        }
+
+        function draw() {
+            const container = document.getElementById('canvas-container');
+            ctx.clearRect(0, 0, container.clientWidth, container.clientHeight);
+
+            ctx.save();
+            ctx.translate(panX, panY);
+            ctx.scale(scale, scale);
+
+            const relatedNames = getRelatedTableNames(selectedTable);
+            drawRelationships(ctx, selectedTable);
+            erdData.tables.forEach(table => drawTable(table, ctx, selectedTable, relatedNames));
+
+            ctx.restore();
+        }
+
+        function drawRelationships(targetCtx = ctx, focusTable = null) {
+            const relations = [];
+
+            erdData.tables.forEach(srcTable => {
+                if (!srcTable.columns) return;
+
+                srcTable.columns.forEach((col, srcIdx) => {
+                    if (col.type === 'FK' && col.refTable) {
+                        const targetTable = erdData.tables.find(t => t.name === col.refTable);
+                        if (!targetTable) return;
+                        const isHighlighted = !!(focusTable && (srcTable === focusTable || targetTable === focusTable));
+                        relations.push({ srcTable, targetTable, col, srcIdx, isHighlighted });
+                    }
+                });
+            });
+
+            // 강조된 관계선을 위에 그리기 위해 비강조 선 먼저, 강조 선 나중에 렌더링
+            const ordered = [
+                ...relations.filter(r => !r.isHighlighted),
+                ...relations.filter(r => r.isHighlighted)
+            ];
+
+            ordered.forEach(({ srcTable, targetTable, col, srcIdx, isHighlighted }) => {
+                let targetIdx = -1;
+                if (targetTable.columns && col.refColumn) {
+                    targetIdx = targetTable.columns.findIndex(c => c.name === col.refColumn);
+                }
+
+                const srcW = getTableWidth(srcTable, targetCtx);
+                const targetW = getTableWidth(targetTable, targetCtx);
+                const srcY = srcTable.y + HEADER_HEIGHT + (srcIdx * ROW_HEIGHT) + (ROW_HEIGHT / 2);
+                const targetY = targetIdx >= 0
+                    ? targetTable.y + HEADER_HEIGHT + (targetIdx * ROW_HEIGHT) + (ROW_HEIGHT / 2)
+                    : targetTable.y + (HEADER_HEIGHT / 2);
+
+                let startX, endX, dirStart, dirEnd;
+                const srcCenter = srcTable.x + srcW / 2;
+                const targetCenter = targetTable.x + targetW / 2;
+
+                if (srcCenter < targetCenter) {
+                    startX = srcTable.x + srcW;
+                    endX = targetTable.x;
+                    dirStart = 1;
+                    dirEnd = -1;
+                } else {
+                    startX = srcTable.x;
+                    endX = targetTable.x + targetW;
+                    dirStart = -1;
+                    dirEnd = 1;
+                }
+
+                const cpOffset = Math.max(Math.abs(endX - startX) * 0.5, 50);
+
+                targetCtx.save();
+                if (focusTable && !isHighlighted) {
+                    targetCtx.globalAlpha = 0.16;
+                }
+
+                targetCtx.beginPath();
+                targetCtx.moveTo(startX, srcY);
+                targetCtx.bezierCurveTo(
+                    startX + cpOffset * dirStart, srcY,
+                    endX + cpOffset * dirEnd, targetY,
+                    endX, targetY
+                );
+                targetCtx.strokeStyle = isHighlighted ? '#4fc1ff' : '#888888';
+                targetCtx.lineWidth = isHighlighted ? 2.6 : 1.8;
+                targetCtx.stroke();
+
+                // FK 원형 마커
+                targetCtx.beginPath();
+                targetCtx.arc(startX + (4 * dirStart), srcY, isHighlighted ? 4 : 3.5, 0, Math.PI * 2);
+                targetCtx.fillStyle = '#ce9178';
+                targetCtx.fill();
+
+                // PK 화살표 마커
+                targetCtx.beginPath();
+                targetCtx.moveTo(endX, targetY);
+                targetCtx.lineTo(endX + (9 * dirEnd), targetY - 5);
+                targetCtx.lineTo(endX + (9 * dirEnd), targetY + 5);
+                targetCtx.closePath();
+                targetCtx.fillStyle = '#4fc1ff';
+                targetCtx.fill();
+
+                targetCtx.restore();
+            });
+        }
+
+        function drawTable(table, targetCtx = ctx, focusTable = null, relatedNames = null) {
+            const x = table.x || 0;
+            const y = table.y || 0;
+            const width = getTableWidth(table, targetCtx);
+            const height = getTableHeight(table);
+            const headerColor = table.headerColor || '#007acc';
+            const isSelected = focusTable === table;
+            const isRelated = !!(relatedNames && relatedNames.has(table.name));
+            const isDimmed = !!(focusTable && !isRelated);
+
+            targetCtx.save();
+            if (isDimmed) {
+                targetCtx.globalAlpha = 0.25;
+            }
+
+            targetCtx.save();
+            targetCtx.shadowColor = isSelected ? 'rgba(79, 193, 255, 0.35)' : 'rgba(0, 0, 0, 0.45)';
+            targetCtx.shadowBlur = isSelected ? 16 : 10;
+            targetCtx.shadowOffsetX = 0;
+            targetCtx.shadowOffsetY = 4;
+
+            targetCtx.fillStyle = '#252526';
+            roundRect(targetCtx, x, y, width, height, 6, true, false);
+            targetCtx.restore();
+
+            targetCtx.fillStyle = headerColor;
+            roundRectTop(targetCtx, x, y, width, HEADER_HEIGHT, 6);
+
+            if (isSelected) {
+                targetCtx.strokeStyle = '#ffffff';
+                targetCtx.lineWidth = 2.2;
+            } else if (focusTable && isRelated) {
+                targetCtx.strokeStyle = '#4fc1ff';
+                targetCtx.lineWidth = 1.6;
+            } else {
+                targetCtx.strokeStyle = '#454545';
+                targetCtx.lineWidth = 1;
+            }
+            roundRect(targetCtx, x, y, width, height, 6, false, true);
+
+            targetCtx.fillStyle = '#ffffff';
+            targetCtx.font = 'bold 13px "Malgun Gothic", sans-serif';
+            targetCtx.textBaseline = 'middle';
+            const titleText = truncateText(targetCtx, getDisplayLabel(table), width - 24);
+            targetCtx.fillText(titleText, x + 12, y + HEADER_HEIGHT / 2);
+
+            if (table.columns) {
+                table.columns.forEach((col, idx) => {
+                    const rowY = y + HEADER_HEIGHT + (idx * ROW_HEIGHT) + 3;
+                    const textY = rowY + ROW_HEIGHT / 2;
+
+                    if (col.type === 'PK') {
+                        targetCtx.fillStyle = '#dcdcaa';
+                        targetCtx.font = 'bold 11px Consolas, monospace';
+                        targetCtx.fillText('PK', x + 10, textY);
+                    } else if (col.type === 'FK') {
+                        targetCtx.fillStyle = '#ce9178';
+                        targetCtx.font = 'bold 11px Consolas, monospace';
+                        targetCtx.fillText('FK', x + 10, textY);
+                    } else {
+                        targetCtx.fillStyle = '#6a9955';
+                        targetCtx.font = '11px Consolas, monospace';
+                        targetCtx.fillText('•', x + 14, textY);
+                    }
+
+                    targetCtx.fillStyle = col.type === 'PK' ? '#ffffff' : '#cccccc';
+                    targetCtx.font = col.type === 'PK'
+                        ? 'bold 12px Consolas, "Malgun Gothic", sans-serif'
+                        : '12px Consolas, "Malgun Gothic", sans-serif';
+                    const colText = truncateText(targetCtx, getDisplayLabel(col), width - 48);
+                    targetCtx.fillText(colText, x + 36, textY);
+                });
+            }
+
+            targetCtx.restore();
+        }
+
+        function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+            if (fill) ctx.fill();
+            if (stroke) ctx.stroke();
+        }
+
+        function roundRectTop(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height);
+            ctx.lineTo(x, y + height);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // 공통 포인터(마우스/터치) 시작 처리
+        function handlePointerDown(sx, sy) {
+            const worldPos = screenToWorld(sx, sy);
+            let hitTable = null;
+
+            for (let i = erdData.tables.length - 1; i >= 0; i--) {
+                const t = erdData.tables[i];
+                const w = getTableWidth(t);
+                const h = getTableHeight(t);
+                if (worldPos.x >= t.x && worldPos.x <= t.x + w &&
+                    worldPos.y >= t.y && worldPos.y <= t.y + h) {
+                    hitTable = t;
+                    break;
+                }
+            }
+
+            if (hitTable) {
+                erdData.tables = erdData.tables.filter(t => t !== hitTable);
+                erdData.tables.push(hitTable);
+
+                draggingTable = hitTable;
+                dragOffsetX = worldPos.x - hitTable.x;
+                dragOffsetY = worldPos.y - hitTable.y;
+                isDraggingMoved = false;
+                palette.style.display = 'none';
+                draw();
+            } else {
+                selectedTable = null;
+                palette.style.display = 'none';
+                isPanning = true;
+                panStartX = sx - panX;
+                panStartY = sy - panY;
+                draw();
+            }
+        }
+
+        // 공통 포인터 이동 처리
+        function handlePointerMove(sx, sy) {
+            if (draggingTable) {
+                const worldPos = screenToWorld(sx, sy);
+                const newX = Math.round(worldPos.x - dragOffsetX);
+                const newY = Math.round(worldPos.y - dragOffsetY);
+
+                // 모바일 손가락 떨림 오차를 감안해 4px 이상 이동 시 드래그로 판정
+                if (Math.abs(draggingTable.x - newX) > 4 || Math.abs(draggingTable.y - newY) > 4) {
+                    isDraggingMoved = true;
+                }
+                if (isDraggingMoved) {
+                    draggingTable.x = newX;
+                    draggingTable.y = newY;
+                    draw();
+                }
+            } else if (isPanning) {
+                panX = sx - panStartX;
+                panY = sy - panStartY;
+                draw();
+            }
+        }
+
+        // 공통 포인터 종료 처리
+        function handlePointerUp(sx, sy) {
+            if (draggingTable) {
+                if (isDraggingMoved) {
+                    syncToTextarea();
+                } else {
+                    const worldPos = screenToWorld(sx, sy);
+                    if (worldPos.y <= draggingTable.y + HEADER_HEIGHT) {
+                        selectedTable = draggingTable;
+                        showColorPalette(sx, sy, draggingTable.headerColor);
+                    } else {
+                        selectedTable = draggingTable;
+                        palette.style.display = 'none';
+                    }
+                    draw();
+                }
+                draggingTable = null;
+            }
+            isPanning = false;
+        }
+
+        // 데스크톱 마우스 이벤트
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            handlePointerDown(e.clientX - rect.left, e.clientY - rect.top);
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            handlePointerMove(e.clientX - rect.left, e.clientY - rect.top);
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (!draggingTable && !isPanning) return;
+            const rect = canvas.getBoundingClientRect();
+            handlePointerUp(e.clientX - rect.left, e.clientY - rect.top);
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const sx = e.clientX - rect.left;
+            const sy = e.clientY - rect.top;
+            const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+            applyZoomAt(sx, sy, scale * zoomFactor);
+        }, { passive: false });
+
+        // 모바일 터치 이벤트 (단일 터치 드래그/탭 + 두 손가락 핀치 줌)
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+
+            if (e.touches.length === 1) {
+                const sx = e.touches[0].clientX - rect.left;
+                const sy = e.touches[0].clientY - rect.top;
+                lastTouchPos = { x: sx, y: sy };
+                lastPinchDist = null;
+                handlePointerDown(sx, sy);
+            } else if (e.touches.length === 2) {
+                // 두 손가락 핀치 시작 시 테이블 드래그 중단
+                draggingTable = null;
+                isPanning = false;
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                lastPinchDist = Math.hypot(dx, dy);
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+
+            if (e.touches.length === 1 && lastPinchDist === null) {
+                const sx = e.touches[0].clientX - rect.left;
+                const sy = e.touches[0].clientY - rect.top;
+                lastTouchPos = { x: sx, y: sy };
+                handlePointerMove(sx, sy);
+            } else if (e.touches.length === 2 && lastPinchDist !== null) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const dist = Math.hypot(dx, dy);
+
+                const midX = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - rect.left;
+                const midY = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - rect.top;
+
+                const zoomFactor = dist / lastPinchDist;
+                lastPinchDist = dist;
+                applyZoomAt(midX, midY, scale * zoomFactor);
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (e.touches.length === 0) {
+                if (lastPinchDist === null) {
+                    handlePointerUp(lastTouchPos.x, lastTouchPos.y);
+                }
+                lastPinchDist = null;
+            }
+        }, { passive: false });
+
+        // 색상 팔레트 위치 계산 (화면 밖으로 넘치지 않도록 보정)
+        function showColorPalette(sx, sy, currentColor) {
+            const container = document.getElementById('canvas-container');
+            palette.style.display = 'flex';
+            const paletteWidth = 250;
+            const left = Math.min(Math.max(sx - 40, 10), container.clientWidth - paletteWidth - 10);
+            const top = Math.max(sy - 52, 10);
+
+            palette.style.left = left + 'px';
+            palette.style.top = top + 'px';
+            document.getElementById('custom-color-input').value = currentColor || '#007acc';
+        }
+
+        function changeTableColor(color) {
+            if (!selectedTable) return;
+            selectedTable.headerColor = color;
+            syncToTextarea();
+            draw();
+        }
+
+        function syncToTextarea() {
+            textarea.value = JSON.stringify(erdData, null, 2);
+            saveToStorage();
+            setJsonStatus(`✓ 자동 저장됨 (테이블 ${erdData.tables.length}개)`);
+        }
+
+        function applyFromTextarea(silent = false, formatTextarea = false) {
+            try {
+                const parsed = JSON.parse(textarea.value);
+                if (!parsed.tables || !Array.isArray(parsed.tables)) {
+                    const msg = 'JSON 최상위에 "tables" 배열이 존재해야 합니다.';
+                    setJsonStatus('✕ ' + msg, true);
+                    if (!silent) alert(msg);
+                    return;
+                }
+                parsed.tables.forEach((t, idx) => {
+                    if (typeof t.x !== 'number') t.x = 60 + (idx % 3) * 280;
+                    if (typeof t.y !== 'number') t.y = 60 + Math.floor(idx / 3) * 220;
+                    if (!t.headerColor) t.headerColor = '#007acc';
+                });
+                const prevSelectedName = selectedTable ? selectedTable.name : null;
+                erdData = parsed;
+                selectedTable = prevSelectedName
+                    ? erdData.tables.find(t => t.name === prevSelectedName) || null
+                    : null;
+                palette.style.display = 'none';
+                if (formatTextarea) {
+                    textarea.value = JSON.stringify(erdData, null, 2);
+                }
+                saveToStorage();
+                setJsonStatus(`✓ 정상 반영됨 (테이블 ${erdData.tables.length}개 · 자동 저장됨)`);
+                draw();
+            } catch (err) {
+                setJsonStatus('✕ JSON 오류: ' + err.message, true);
+                if (!silent) alert('JSON 파싱 오류가 발생했습니다:\n' + err.message);
+            }
+        }
+
+        function autoLayout() {
+            if (!erdData.tables || erdData.tables.length === 0) return;
+
+            const cols = window.innerWidth <= 768 ? 2 : 3;
+            const gapX = 64;
+            const gapY = 52;
+            const startX = 40;
+            const startY = 50;
+
+            const rows = Math.ceil(erdData.tables.length / cols);
+            const colWidths = new Array(cols).fill(MIN_TABLE_WIDTH);
+            const rowHeights = new Array(rows).fill(0);
+
+            erdData.tables.forEach((t, idx) => {
+                const c = idx % cols;
+                const r = Math.floor(idx / cols);
+                const w = getTableWidth(t);
+                const h = getTableHeight(t);
+                if (w > colWidths[c]) colWidths[c] = w;
+                if (h > rowHeights[r]) rowHeights[r] = h;
+            });
+
+            const colOffsets = [startX];
+            for (let c = 1; c < cols; c++) {
+                colOffsets[c] = colOffsets[c - 1] + colWidths[c - 1] + gapX;
+            }
+
+            const rowOffsets = [startY];
+            for (let r = 1; r < rows; r++) {
+                rowOffsets[r] = rowOffsets[r - 1] + rowHeights[r - 1] + gapY;
+            }
+
+            erdData.tables.forEach((t, idx) => {
+                const c = idx % cols;
+                const r = Math.floor(idx / cols);
+                t.x = colOffsets[c];
+                t.y = rowOffsets[r];
+            });
+
+            syncToTextarea();
+            fitToScreen();
+        }
+
+        function resetToDefault() {
+            if (!confirm('현재 작업 중인 ERD를 초기 샘플 데이터로 복원하시겠습니까?')) return;
+            erdData = JSON.parse(JSON.stringify(defaultData));
+            selectedTable = null;
+            palette.style.display = 'none';
+            syncToTextarea();
+            fitToScreen();
+        }
+
+        function exportPNG() {
+            const bounds = getTablesBounds();
+            if (!bounds) {
+                alert('내보낼 테이블이 없습니다.');
+                return;
+            }
+
+            const padding = 40;
+            const exportScale = 2;
+            const width = Math.ceil(bounds.width + padding * 2);
+            const height = Math.ceil(bounds.height + padding * 2);
+
+            const offCanvas = document.createElement('canvas');
+            offCanvas.width = width * exportScale;
+            offCanvas.height = height * exportScale;
+            const offCtx = offCanvas.getContext('2d');
+
+            offCtx.scale(exportScale, exportScale);
+
+            // 배경 및 도트 그리드
+            offCtx.fillStyle = '#181818';
+            offCtx.fillRect(0, 0, width, height);
+            offCtx.fillStyle = '#2d2d2d';
+            for (let gx = 10; gx < width; gx += 20) {
+                for (let gy = 10; gy < height; gy += 20) {
+                    offCtx.fillRect(gx, gy, 1, 1);
+                }
+            }
+
+            offCtx.save();
+            offCtx.translate(-bounds.minX + padding, -bounds.minY + padding);
+            drawRelationships(offCtx, null);
+            erdData.tables.forEach(table => drawTable(table, offCtx, null, null));
+            offCtx.restore();
+
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
+            const triggerDownload = (url, shouldRevoke) => {
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `erd_diagram_${timestamp}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                if (shouldRevoke) URL.revokeObjectURL(url);
+            };
+
+            if (offCanvas.toBlob) {
+                offCanvas.toBlob((blob) => {
+                    if (!blob) return;
+                    triggerDownload(URL.createObjectURL(blob), true);
+                }, 'image/png');
+            } else {
+                triggerDownload(offCanvas.toDataURL('image/png'), false);
+            }
+        }
+
+        function exportJSON() {
+            const jsonStr = JSON.stringify(erdData, null, 2);
+            textarea.value = jsonStr;
+            saveToStorage();
+
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
+            a.href = url;
+            a.download = `erd_layout_${timestamp}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                textarea.value = e.target.result;
+                applyFromTextarea(false, true);
+                fitToScreen();
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
